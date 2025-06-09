@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор стоимости отеля</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .calculator-container { max-width: 700px; margin: 40px auto; padding: 30px; background-color: #ffffff; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .result-section { margin-top: 30px; padding: 20px; background-color: #e9ecef; border-radius: 8px; line-height: 1.6; }
+        .form-group label { font-weight: 600; }
+        select:disabled { background-color: #e9ecef; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="calculator-container">
+            <h2 class="text-center mb-4">Калькулятор стоимости проживания</h2>
+
+            <form action="/calculate_price" method="post">
+                <div class="form-row">
+                    <div class="form-group col-md-12">
+                        <label for="region">1. Выберите район:</label>
+                        <select id="region" name="region" class="form-control" required>
+                            <option value="">-- Район --</option>
+                            {% for region in regions %}
+                                <option value="{{ region }}" {% if user_input and user_input.region == region %}selected{% endif %}>{{ region }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group col-md-12">
+                        <label for="hotel">2. Выберите отель:</label>
+                        <select id="hotel" name="hotel" class="form-control" required disabled>
+                            <option value="">-- Сначала выберите район --</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                     <div class="form-group col-md-12">
+                        <label for="category">3. Выберите категорию номера:</label>
+                        <select id="category" name="category" class="form-control" required disabled>
+                            <option value="">-- Сначала выберите отель --</option>
+                        </select>
+                    </div>
+                </div>
+                <hr>
+                <div class="form-row">
+                    <div class="form-group col-md-6">
+                        <label for="checkin_date">Дата заезда:</label>
+                        <input type="date" id="checkin_date" name="checkin_date" class="form-control" value="{{ user_input.checkin_date if user_input else '' }}" required>
+                    </div>
+                    <div class="form-group col-md-6">
+                        <label for="checkout_date">Дата выезда:</label>
+                        <input type="date" id="checkout_date" name="checkout_date" class="form-control" value="{{ user_input.checkout_date if user_input else '' }}" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group col-md-4">
+                        <label for="adults_count">Взрослых:</label>
+                        <input type="number" id="adults_count" name="adults_count" class="form-control" value="{{ user_input.adults_count if user_input else '2' }}" min="1" required>
+                    </div>
+                    <div class="form-group col-md-4">
+                        <label for="children_count">Детей:</label>
+                        <input type="number" id="children_count" name="children_count" class="form-control" value="{{ user_input.children_count if user_input else '0' }}" min="0">
+                    </div>
+                     <div class="form-group col-md-4">
+                        <label for="usd_rate">Курс USD:</label>
+                        <input type="number" id="usd_rate" name="usd_rate" class="form-control" step="any" placeholder="Например: 16400" value="{{ user_input.usd_rate if user_input else '' }}">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="additional_options">Дополнительные опции:</label>
+                    <input type="text" id="additional_options" name="additional_options" class="form-control" placeholder="Например: FB, extra bed for child" value="{{ user_input.additional_options if user_input else '' }}">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">Рассчитать стоимость</button>
+            </form>
+
+            {% if error_message %}
+                <div class="alert alert-danger mt-4"> {{ error_message }} </div>
+            {% endif %}
+
+            {% if calculation_result_html %}
+                <div class="result-section">
+                    <h4>Результат расчета:</h4>
+                    <p> {{ calculation_result_html|safe }} </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Безопасно передаем данные из Flask в JavaScript
+        const hotelData = {{ all_hotel_data|tojson }};
+        const userInput = {{ user_input|tojson }};
+
+        const regionSelect = document.getElementById('region');
+        const hotelSelect = document.getElementById('hotel');
+        const categorySelect = document.getElementById('category');
+
+        function populateHotels() {
+            const selectedRegion = regionSelect.value;
+            // Очищаем и блокируем следующие списки
+            hotelSelect.innerHTML = '<option value="">-- Выберите отель --</option>';
+            categorySelect.innerHTML = '<option value="">-- Сначала выберите отель --</option>';
+            hotelSelect.disabled = true;
+            categorySelect.disabled = true;
+
+            if (selectedRegion && hotelData[selectedRegion]) {
+                const hotels = Object.keys(hotelData[selectedRegion]).sort();
+                hotels.forEach(hotel => {
+                    const option = new Option(hotel, hotel);
+                    hotelSelect.add(option);
+                });
+                hotelSelect.disabled = false;
+            }
+        }
+        
+        function populateCategories() {
+            const selectedRegion = regionSelect.value;
+            const selectedHotel = hotelSelect.value;
+            // Очищаем и блокируем список категорий
+            categorySelect.innerHTML = '<option value="">-- Выберите категорию --</option>';
+            categorySelect.disabled = true;
+
+            if (selectedRegion && selectedHotel && hotelData[selectedRegion][selectedHotel]) {
+                const categories = hotelData[selectedRegion][selectedHotel];
+                categories.forEach(category => {
+                    const option = new Option(category, category);
+                    categorySelect.add(option);
+                });
+                categorySelect.disabled = false;
+            }
+        }
+        
+        // Назначаем обработчики событий
+        regionSelect.addEventListener('change', populateHotels);
+        hotelSelect.addEventListener('change', populateCategories);
+
+        // Функция для восстановления состояния формы после перезагрузки страницы с результатом
+        function restoreFormState() {
+            if (userInput && userInput.region) {
+                regionSelect.value = userInput.region;
+                populateHotels(); // Заполняем отели
+                if (userInput.hotel) {
+                    hotelSelect.value = userInput.hotel;
+                    populateCategories(); // Заполняем категории
+                    if (userInput.category) {
+                        categorySelect.value = userInput.category;
+                    }
+                }
+            }
+        }
+
+        // Вызываем функцию при загрузке страницы, чтобы восстановить значения
+        document.addEventListener('DOMContentLoaded', restoreFormState);
+
+    </script>
+</body>
+</html>
